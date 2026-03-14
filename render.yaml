@@ -1,0 +1,6 @@
+services:
+  - type: worker
+    name: socket-game-server
+    runtime: python
+    buildCommand: ""
+    startCommand: python server.py
