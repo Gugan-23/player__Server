@@ -1,3 +1,5 @@
+import eventlet
+eventlet.monkey_patch()
 from flask import Flask, request
 from flask_socketio import SocketIO, emit
 
@@ -43,7 +45,10 @@ def handle_join(data):
 # 🔹 Receive message
 @socketio.on('message')
 def handle_message(msg):
-    player = players.get(request.sid, {"name": "Unknown", "ip": "?"})
+    if request.sid not in players:
+        return  # ❌ Ignore until joined
+
+    player = players[request.sid]
     username = player["name"]
     ip = player["ip"]
 
