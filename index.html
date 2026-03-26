@@ -1,850 +1,769 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>🎡 Spin Battle</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+<title>SpinBattle — Wheel of Fortune Duels</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Bungee&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap');
-
   :root {
-    --bg: #0a0a0f;
-    --panel: #12121a;
-    --border: #1e1e2e;
-    --accent: #f0c040;
-    --accent2: #ff4d6d;
-    --accent3: #4dffa0;
-    --text: #e8e8f0;
-    --muted: #555570;
-    --glow: 0 0 20px rgba(240,192,64,0.4);
-    --glow2: 0 0 20px rgba(255,77,109,0.4);
+    --bg:       #0b0c10;
+    --surface:  #141720;
+    --card:     #1c2030;
+    --border:   #2a2f42;
+    --accent:   #f7c948;
+    --accent2:  #ff5e5b;
+    --green:    #35d07f;
+    --blue:     #4ea8de;
+    --text:     #e8eaf0;
+    --muted:    #7a7f96;
+    --radius:   12px;
+    --spin-dur: 4s;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--bg); color: var(--text);
+    font-family: 'DM Sans', sans-serif; overflow-x: hidden; }
+
+  /* ── NOISE OVERLAY ── */
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 999;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    opacity: .4;
   }
 
-  * { margin:0; padding:0; box-sizing:border-box; }
+  /* ── LAYOUT ── */
+  #app { min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 24px; }
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Rajdhani', sans-serif;
-    min-height: 100vh;
-    overflow-x: hidden;
-    background-image:
-      radial-gradient(ellipse at 20% 20%, rgba(240,192,64,0.04) 0%, transparent 50%),
-      radial-gradient(ellipse at 80% 80%, rgba(255,77,109,0.04) 0%, transparent 50%);
-  }
+  .screen { width: 100%; max-width: 460px; animation: fadeIn .35s ease; }
+  .screen.wide { max-width: 860px; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
 
-  /* ── STARS ── */
-  .stars {
-    position: fixed; inset:0; pointer-events:none; z-index:0;
-    background: transparent;
-  }
-  .stars::before, .stars::after {
-    content:'';
-    position:absolute; inset:0;
-    background-image:
-      radial-gradient(1px 1px at 10% 20%, rgba(255,255,255,0.3) 0%, transparent 100%),
-      radial-gradient(1px 1px at 30% 50%, rgba(255,255,255,0.2) 0%, transparent 100%),
-      radial-gradient(1px 1px at 60% 10%, rgba(255,255,255,0.3) 0%, transparent 100%),
-      radial-gradient(1px 1px at 80% 70%, rgba(255,255,255,0.2) 0%, transparent 100%),
-      radial-gradient(1px 1px at 45% 85%, rgba(255,255,255,0.3) 0%, transparent 100%),
-      radial-gradient(1px 1px at 90% 30%, rgba(255,255,255,0.2) 0%, transparent 100%);
-  }
+  /* ── LOGO ── */
+  .logo { font-family: 'Bebas Neue', sans-serif; font-size: 3rem; letter-spacing: 3px;
+    color: var(--accent); text-shadow: 0 0 30px rgba(247,201,72,.4); text-align: center;
+    margin-bottom: 6px; }
+  .logo-sub { text-align:center; color: var(--muted); font-size:.85rem;
+    letter-spacing: 2px; text-transform: uppercase; margin-bottom: 32px; }
 
-  /* ── SCREENS ── */
-  .screen { display:none; position:relative; z-index:1; }
-  .screen.active { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; padding:2rem; }
+  /* ── CARD ── */
+  .card { background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 32px; }
 
-  /* ── LOBBY ── */
-  #lobby {
-    gap: 2rem;
-  }
+  /* ── TABS ── */
+  .tab-bar { display: flex; gap: 4px; background: var(--surface);
+    border-radius: 8px; padding: 4px; margin-bottom: 28px; }
+  .tab-btn { flex: 1; padding: 9px; border: none; background: transparent;
+    color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: .9rem;
+    font-weight: 500; border-radius: 6px; cursor: pointer; transition: all .2s; }
+  .tab-btn.active { background: var(--accent); color: #000; }
 
-  .logo {
-    font-family: 'Bungee', cursive;
-    font-size: clamp(2.5rem, 8vw, 5rem);
-    color: var(--accent);
-    text-shadow: var(--glow), 0 0 60px rgba(240,192,64,0.2);
-    letter-spacing: 4px;
-    animation: pulse 3s ease-in-out infinite;
-  }
-  .logo span { color: var(--accent2); }
+  /* ── FORM ── */
+  .form-group { margin-bottom: 18px; }
+  label { display: block; font-size: .8rem; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  input[type=text], input[type=password] {
+    width: 100%; padding: 12px 16px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-size: .95rem; outline: none;
+    transition: border-color .2s; }
+  input:focus { border-color: var(--accent); }
 
-  @keyframes pulse {
-    0%,100% { text-shadow: var(--glow), 0 0 60px rgba(240,192,64,0.2); }
-    50% { text-shadow: 0 0 40px rgba(240,192,64,0.8), 0 0 80px rgba(240,192,64,0.4); }
-  }
+  /* ── BUTTONS ── */
+  .btn { display: inline-flex; align-items: center; justify-content: center;
+    gap: 8px; padding: 13px 28px; border: none; border-radius: 8px;
+    font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem; letter-spacing: 1.5px;
+    cursor: pointer; transition: all .2s; text-decoration: none; }
+  .btn-primary { background: var(--accent); color: #000; width: 100%; }
+  .btn-primary:hover { background: #ffe066; transform: translateY(-1px); }
+  .btn-secondary { background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger { background: var(--accent2); color: #fff; }
+  .btn-disabled { opacity: .4; cursor: not-allowed; }
+  .btn-sm { padding: 8px 16px; font-size: .85rem; }
 
-  .subtitle {
-    font-family: 'Orbitron', monospace;
-    font-size: 0.85rem;
-    color: var(--muted);
-    letter-spacing: 6px;
-    text-transform: uppercase;
-  }
-
-  .input-group {
-    display:flex; flex-direction:column; gap:0.75rem; width:100%; max-width:360px;
-  }
-
-  .input-group label {
-    font-family: 'Orbitron', monospace;
-    font-size: 0.7rem;
-    letter-spacing: 3px;
-    color: var(--muted);
-    text-transform: uppercase;
-  }
-
-  input[type="text"] {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 1rem 1.25rem;
-    color: var(--text);
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 1.1rem;
-    font-weight: 600;
-    outline: none;
-    transition: border-color 0.3s, box-shadow 0.3s;
-    width: 100%;
-  }
-
-  input[type="text"]:focus {
-    border-color: var(--accent);
-    box-shadow: var(--glow);
-  }
-
-  .btn {
-    padding: 1rem 2.5rem;
-    border: none;
-    border-radius: 8px;
-    font-family: 'Orbitron', monospace;
-    font-size: 0.85rem;
-    font-weight: 700;
-    letter-spacing: 2px;
-    cursor: pointer;
-    transition: all 0.2s;
-    text-transform: uppercase;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .btn-primary {
-    background: linear-gradient(135deg, var(--accent), #e08800);
-    color: #0a0a0f;
-    box-shadow: var(--glow);
-  }
-
-  .btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 0 40px rgba(240,192,64,0.6);
-  }
-
-  .btn-primary:active { transform: translateY(0); }
-
-  .btn-secondary {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--muted);
-  }
-  .btn-secondary:hover {
-    border-color: var(--accent2);
-    color: var(--accent2);
-  }
-
-  .btn-spin {
-    background: linear-gradient(135deg, var(--accent2), #c0003a);
-    color: white;
-    font-size: 1rem;
-    padding: 1.25rem 3rem;
-    box-shadow: var(--glow2);
-    width: 100%;
-    max-width: 300px;
-  }
-  .btn-spin:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 0 50px rgba(255,77,109,0.7);
-  }
-  .btn-spin:disabled {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    color: var(--muted);
-    box-shadow: none;
-    cursor: not-allowed;
-    transform: none;
-  }
+  /* ── ALERT ── */
+  .alert { padding: 12px 16px; border-radius: 8px; font-size: .9rem;
+    margin-bottom: 16px; display: none; }
+  .alert.error   { background: rgba(255,94,91,.15); border: 1px solid var(--accent2); color: var(--accent2); }
+  .alert.success { background: rgba(53,208,127,.15); border: 1px solid var(--green); color: var(--green); }
+  .alert.show    { display: block; }
 
   /* ── WAITING ── */
-  .waiting-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 3rem;
-    text-align: center;
-    max-width: 400px;
-    width: 100%;
-  }
-
-  .spinner-dots {
-    display:flex; gap:8px; justify-content:center; margin:1.5rem 0;
-  }
-  .dot {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    background: var(--accent);
-    animation: bounce 1.2s ease-in-out infinite;
-  }
-  .dot:nth-child(2) { animation-delay: 0.2s; background: var(--accent2); }
-  .dot:nth-child(3) { animation-delay: 0.4s; background: var(--accent3); }
-
-  @keyframes bounce {
-    0%,80%,100% { transform:scale(0.6); opacity:0.5; }
-    40% { transform:scale(1); opacity:1; }
-  }
+  #waiting-screen { text-align: center; }
+  .spinner { width: 56px; height: 56px; border: 4px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite;
+    margin: 0 auto 20px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .waiting-text { font-size: 1.1rem; color: var(--muted); margin-bottom: 8px; }
+  .room-badge { font-family: 'Bebas Neue', sans-serif; font-size: .85rem;
+    letter-spacing: 1px; color: var(--accent); background: rgba(247,201,72,.1);
+    border: 1px solid rgba(247,201,72,.3); padding: 6px 14px; border-radius: 20px;
+    display: inline-block; margin-top: 12px; }
 
   /* ── GAME SCREEN ── */
-  #game {
-    gap: 1.5rem;
-    padding: 1.5rem;
-    max-width: 900px;
-    margin: 0 auto;
-    width: 100%;
-  }
+  #game-screen .game-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  .round-pill { background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 18px; border-radius: 20px; font-family: 'Bebas Neue', sans-serif;
+    font-size: 1rem; letter-spacing: 1px; }
+  .round-pill span { color: var(--accent); }
 
-  .game-header {
-    display:flex; justify-content:space-between; align-items:center;
-    width:100%; padding:1rem 1.5rem;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-  }
+  /* ── PLAYERS ROW ── */
+  .players-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px;
+    align-items: center; margin-bottom: 24px; }
+  .player-card { background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; text-align: center; transition: border-color .3s; }
+  .player-card.me  { border-color: var(--blue); }
+  .player-card.opp { border-color: var(--accent2); }
+  .player-label { font-size: .7rem; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); margin-bottom: 4px; }
+  .player-name { font-family: 'Bebas Neue', sans-serif; font-size: 1.3rem;
+    letter-spacing: 1px; }
+  .player-score { font-size: 2rem; font-weight: 600; color: var(--accent);
+    line-height: 1; margin-top: 8px; }
+  .player-spin { font-size: .85rem; color: var(--muted); margin-top: 4px; }
+  .vs-badge { font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem;
+    color: var(--muted); text-align: center; }
 
-  .round-badge {
-    font-family: 'Orbitron', monospace;
-    font-size: 0.75rem;
-    letter-spacing: 3px;
-    color: var(--accent);
-    text-transform: uppercase;
-  }
+  /* ── WHEEL ── */
+  .wheel-section { text-align: center; margin-bottom: 24px; }
+  #wheel-canvas { border-radius: 50%; box-shadow: 0 0 40px rgba(247,201,72,.15);
+    transition: transform var(--spin-dur) cubic-bezier(.17,.67,.35,.99); display: block;
+    margin: 0 auto; }
+  .wheel-pointer { font-size: 1.5rem; margin-bottom: -4px; display: block; }
 
-  .vs-text {
-    font-family: 'Bungee', cursive;
-    font-size: 1.5rem;
-    color: var(--accent2);
-    text-shadow: var(--glow2);
-  }
+  /* ── SPIN BUTTON ── */
+  #spin-btn { margin: 20px auto 0; display: block; min-width: 200px;
+    font-size: 1.3rem; padding: 16px 40px; }
+  #spin-btn:not(.btn-disabled):hover { transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(247,201,72,.3); }
 
-  /* ── SCORE CARDS ── */
-  .scores {
-    display:grid; grid-template-columns: 1fr 1fr;
-    gap: 1rem; width:100%;
-  }
+  /* ── ROUND RESULT TOAST ── */
+  #round-toast { position: fixed; top: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 28px; text-align: center; z-index: 100; opacity: 0;
+    transition: opacity .3s; pointer-events: none; min-width: 280px; }
+  #round-toast.show { opacity: 1; }
+  #round-toast .toast-title { font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.4rem; letter-spacing: 1px; margin-bottom: 6px; }
+  #round-toast .toast-detail { font-size: .85rem; color: var(--muted); }
 
-  .score-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.25rem;
-    text-align: center;
-    transition: border-color 0.3s;
-  }
+  /* ── GAME OVER ── */
+  #gameover-screen { text-align: center; }
+  .result-trophy { font-size: 4rem; margin-bottom: 8px; }
+  .result-title { font-family: 'Bebas Neue', sans-serif; font-size: 2.5rem;
+    letter-spacing: 3px; margin-bottom: 4px; }
+  .result-subtitle { color: var(--muted); margin-bottom: 28px; }
+  .score-breakdown { display: flex; gap: 16px; justify-content: center;
+    margin-bottom: 28px; }
+  .score-box { background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 28px; text-align: center; }
+  .score-box .sb-name { font-size: .8rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 1px; }
+  .score-box .sb-val { font-size: 2rem; font-weight: 700; color: var(--accent); }
+  .gameover-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
 
-  .score-card.me { border-color: rgba(240,192,64,0.3); }
-  .score-card.opponent { border-color: rgba(255,77,109,0.2); }
+  /* ── STATS ROW ── */
+  .stats-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .stat-chip { background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 14px; font-size: .82rem; }
+  .stat-chip strong { color: var(--accent); }
 
-  .score-card .player-label {
-    font-family: 'Orbitron', monospace;
-    font-size: 0.6rem;
-    letter-spacing: 3px;
-    color: var(--muted);
-    text-transform: uppercase;
-    margin-bottom: 0.5rem;
-  }
+  /* ── LEADERBOARD MODAL ── */
+  #lb-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.75);
+    backdrop-filter: blur(6px); z-index: 200; align-items: center; justify-content: center; }
+  #lb-modal.show { display: flex; }
+  .lb-card { background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 32px; width: 100%; max-width: 500px;
+    max-height: 80vh; overflow-y: auto; }
+  .lb-header { display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 20px; }
+  .lb-header h2 { font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; letter-spacing: 2px; }
+  .lb-close { background: none; border: none; color: var(--muted); font-size: 1.4rem;
+    cursor: pointer; }
+  .lb-table { width: 100%; border-collapse: collapse; }
+  .lb-table th { font-size: .75rem; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); border-bottom: 1px solid var(--border); padding: 8px 12px;
+    text-align: left; }
+  .lb-table td { padding: 11px 12px; border-bottom: 1px solid rgba(255,255,255,.04);
+    font-size: .9rem; }
+  .lb-table tr:first-child td { color: var(--accent); font-weight: 600; }
+  .rank-badge { font-family: 'Bebas Neue', sans-serif; font-size:.9rem;
+    width:26px; height:26px; border-radius: 50%; display:inline-flex; align-items:center;
+    justify-content:center; background: var(--surface); }
 
-  .score-card .player-name {
-    font-family: 'Bungee', cursive;
-    font-size: 1.3rem;
-    color: var(--accent);
-    margin-bottom: 0.5rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+  /* ── ROOMS MODAL ── */
+  #rooms-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.75);
+    backdrop-filter:blur(6px); z-index:200; align-items:center; justify-content:center; }
+  #rooms-modal.show { display:flex; }
+  .room-row { background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 18px; margin-bottom: 10px; }
+  .room-row .rr-id { font-family: 'Bebas Neue', sans-serif; font-size:.9rem;
+    color: var(--accent); letter-spacing: 1px; margin-bottom: 4px; }
+  .room-row .rr-info { font-size: .85rem; color: var(--muted); }
+  .state-pill { font-size: .7rem; padding: 2px 8px; border-radius: 10px;
+    font-weight: 600; text-transform: uppercase; }
+  .state-active { background: rgba(78,168,222,.2); color: var(--blue); }
+  .state-done   { background: rgba(53,208,127,.15); color: var(--green); }
+  .state-abandoned { background: rgba(255,94,91,.15); color: var(--accent2); }
 
-  .score-card.opponent .player-name { color: var(--accent2); }
-
-  .score-card .score-val {
-    font-family: 'Orbitron', monospace;
-    font-size: 2rem;
-    font-weight: 900;
-    color: var(--text);
-  }
-
-  /* ── WHEELS AREA ── */
-  .wheels-area {
-    display:grid; grid-template-columns: 1fr 1fr;
-    gap: 2rem; width:100%;
-    align-items: center;
-  }
-
-  .wheel-container {
-    display:flex; flex-direction:column; align-items:center; gap:1rem;
-  }
-
-  .wheel-wrap {
-    position: relative;
-    width: min(220px, 42vw);
-    height: min(220px, 42vw);
-  }
-
-  .pointer {
-    position:absolute;
-    top: -18px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 0; height: 0;
-    border-left: 12px solid transparent;
-    border-right: 12px solid transparent;
-    border-top: 24px solid var(--accent);
-    filter: drop-shadow(0 0 8px rgba(240,192,64,0.8));
-    z-index: 10;
-  }
-
-  canvas.wheel {
-    border-radius: 50%;
-    box-shadow: 0 0 30px rgba(0,0,0,0.5), 0 0 60px rgba(240,192,64,0.1);
-    transition: box-shadow 0.3s;
-    width: 100%; height: 100%;
-  }
-
-  canvas.wheel.spinning {
-    box-shadow: 0 0 30px rgba(0,0,0,0.5), 0 0 80px rgba(255,77,109,0.4);
-  }
-
-  .wheel-label {
-    font-family: 'Orbitron', monospace;
-    font-size: 0.65rem;
-    letter-spacing: 3px;
-    color: var(--muted);
-    text-transform: uppercase;
-  }
-
-  .spin-value {
-    font-family: 'Bungee', cursive;
-    font-size: 1.8rem;
-    color: var(--accent3);
-    text-shadow: 0 0 20px rgba(77,255,160,0.5);
-    min-height: 2.2rem;
-    transition: all 0.3s;
-  }
-
-  /* ── ACTION AREA ── */
-  .action-area {
-    display:flex; flex-direction:column; align-items:center; gap:1rem; width:100%;
-  }
-
-  .status-msg {
-    font-family: 'Orbitron', monospace;
-    font-size: 0.75rem;
-    letter-spacing: 2px;
-    color: var(--muted);
-    text-transform: uppercase;
-    min-height: 1.2rem;
-    text-align: center;
-  }
-
-  /* ── LOG ── */
-  .log {
-    width:100%;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1rem 1.25rem;
-    max-height: 120px;
-    overflow-y: auto;
-    display:flex; flex-direction:column; gap:0.4rem;
-  }
-
-  .log-entry {
-    font-size: 0.85rem;
-    color: var(--muted);
-    font-weight: 600;
-    animation: fadeIn 0.4s ease;
-  }
-  .log-entry.highlight { color: var(--accent3); }
-  .log-entry.warn { color: var(--accent2); }
-
-  @keyframes fadeIn {
-    from { opacity:0; transform:translateY(4px); }
-    to { opacity:1; transform:translateY(0); }
-  }
-
-  /* ── OVERLAY ── */
-  .overlay {
-    position:fixed; inset:0;
-    background: rgba(0,0,0,0.85);
-    backdrop-filter: blur(8px);
-    display:none; flex-direction:column; align-items:center; justify-content:center;
-    z-index: 100;
-    gap: 1.5rem;
-  }
-  .overlay.show { display:flex; }
-
-  .overlay-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 3rem;
-    text-align: center;
-    max-width: 420px;
-    width: 90%;
-    animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
-  @keyframes popIn {
-    from { transform:scale(0.7); opacity:0; }
-    to { transform:scale(1); opacity:1; }
-  }
-
-  .overlay-card h2 {
-    font-family: 'Bungee', cursive;
-    font-size: 2.5rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .winner-name {
-    font-family: 'Bungee', cursive;
-    font-size: 2rem;
-    color: var(--accent);
-    text-shadow: var(--glow);
-    margin: 1rem 0;
-  }
-
-  .final-scores {
-    display:flex; gap:1rem; justify-content:center; margin:1.5rem 0;
-  }
-  .final-score-item {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 0.75rem 1.25rem;
-    text-align:center;
-  }
-  .final-score-item .name { font-size:0.8rem; color:var(--muted); font-weight:700; letter-spacing:1px; }
-  .final-score-item .pts {
-    font-family:'Orbitron', monospace;
-    font-size:1.5rem;
-    font-weight:900;
-    color:var(--accent);
-  }
-
-  .btn-row { display:flex; gap:1rem; justify-content:center; flex-wrap:wrap; }
-
-  /* ── CONFETTI ── */
-  .confetti-piece {
-    position:fixed;
-    top:-10px;
-    width:10px; height:10px;
-    border-radius: 2px;
-    animation: confettiFall linear forwards;
-    pointer-events:none;
-    z-index:200;
-  }
-  @keyframes confettiFall {
-    to { transform: translateY(105vh) rotate(720deg); opacity:0; }
-  }
+  /* ── NAV STRIP ── */
+  .nav-strip { display:flex; gap:10px; justify-content:flex-end; margin-bottom:18px;
+    flex-wrap: wrap; }
 
   /* ── RESPONSIVE ── */
-  @media (max-width: 500px) {
-    .wheels-area { grid-template-columns: 1fr; gap: 1rem; }
-    .scores { grid-template-columns: 1fr 1fr; }
-    .wheel-wrap { width: 160px; height: 160px; }
+  @media (max-width:560px) {
+    .players-row { grid-template-columns: 1fr; }
+    .vs-badge { display:none; }
+    .card { padding: 24px 18px; }
   }
 </style>
 </head>
 <body>
+<div id="app">
 
-<div class="stars"></div>
-
-<!-- LOBBY -->
-<div id="lobby" class="screen active">
-  <div class="logo">SPIN<span>BATTLE</span></div>
-  <div class="subtitle">Multiplayer Wheel Game</div>
-  <div class="input-group">
-    <label>Your Name</label>
-    <input type="text" id="usernameInput" placeholder="Enter your name..." maxlength="16" />
-  </div>
-  <button class="btn btn-primary" onclick="joinGame()">ENTER ARENA</button>
-</div>
-
-<!-- WAITING -->
-<div id="waiting" class="screen">
-  <div class="waiting-card">
-    <div style="font-family:'Bungee',cursive;font-size:1.5rem;color:var(--accent);margin-bottom:1rem;">FINDING OPPONENT</div>
-    <div class="spinner-dots">
-      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-    </div>
-    <div style="color:var(--muted);font-size:0.9rem;letter-spacing:1px;">Searching for a worthy challenger...</div>
-  </div>
-</div>
-
-<!-- GAME -->
-<div id="game" class="screen">
-  <div class="game-header">
-    <div class="round-badge" id="roundDisplay">ROUND 1 / 3</div>
-    <div class="vs-text">VS</div>
-    <div class="round-badge" id="roomDisplay">ROOM —</div>
-  </div>
-
-  <div class="scores">
-    <div class="score-card me">
-      <div class="player-label">You</div>
-      <div class="player-name" id="myName">—</div>
-      <div class="score-val" id="myScore">0</div>
-    </div>
-    <div class="score-card opponent">
-      <div class="player-label">Opponent</div>
-      <div class="player-name" id="oppName">—</div>
-      <div class="score-val" id="oppScore">0</div>
-    </div>
-  </div>
-
-  <div class="wheels-area">
-    <div class="wheel-container">
-      <div class="wheel-wrap">
-        <div class="pointer"></div>
-        <canvas id="myWheel" class="wheel" width="300" height="300"></canvas>
+  <!-- ████ AUTH SCREEN ████ -->
+  <div class="screen" id="auth-screen">
+    <div class="logo">SpinBattle</div>
+    <div class="logo-sub">Wheel of Fortune Duels</div>
+    <div class="card">
+      <div class="tab-bar">
+        <button class="tab-btn active" id="tab-login"    onclick="switchTab('login')">Login</button>
+        <button class="tab-btn"        id="tab-register" onclick="switchTab('register')">Register</button>
       </div>
-      <div class="wheel-label">YOUR WHEEL</div>
-      <div class="spin-value" id="mySpinVal"></div>
-    </div>
-    <div class="wheel-container">
-      <div class="wheel-wrap">
-        <div class="pointer"></div>
-        <canvas id="oppWheel" class="wheel" width="300" height="300"></canvas>
+
+      <!-- Login -->
+      <div id="form-login">
+        <div class="alert error" id="login-err"></div>
+        <div class="alert success" id="login-ok"></div>
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="login-user" placeholder="your username" autocomplete="username"/>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"
+            onkeydown="if(event.key==='Enter') doLogin()"/>
+        </div>
+        <button class="btn btn-primary" onclick="doLogin()">Login & Play</button>
       </div>
-      <div class="wheel-label">OPPONENT</div>
-      <div class="spin-value" id="oppSpinVal"></div>
+
+      <!-- Register -->
+      <div id="form-register" style="display:none">
+        <div class="alert error"   id="reg-err"></div>
+        <div class="alert success" id="reg-ok"></div>
+        <div class="form-group">
+          <label>Choose Username</label>
+          <input type="text" id="reg-user" placeholder="your username" autocomplete="username"/>
+        </div>
+        <div class="form-group">
+          <label>Choose Password <span style="color:var(--muted);font-weight:400">(min 4 chars)</span></label>
+          <input type="password" id="reg-pass" placeholder="••••••••" autocomplete="new-password"
+            onkeydown="if(event.key==='Enter') doRegister()"/>
+        </div>
+        <button class="btn btn-primary" onclick="doRegister()">Create Account</button>
+      </div>
     </div>
   </div>
 
-  <div class="action-area">
-    <div class="status-msg" id="statusMsg">Waiting for match...</div>
-    <button class="btn btn-spin" id="spinBtn" onclick="doSpin()" disabled>SPIN THE WHEEL</button>
+  <!-- ████ WAITING SCREEN ████ -->
+  <div class="screen" id="waiting-screen" style="display:none">
+    <div class="logo">SpinBattle</div>
+    <div class="card" style="text-align:center">
+      <div class="spinner"></div>
+      <div class="waiting-text" id="wait-msg">Connecting…</div>
+      <div id="wait-room" class="room-badge" style="display:none"></div>
+      <br/><br/>
+      <div id="my-stats-row" class="stats-row" style="justify-content:center"></div>
+      <br/>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="openLeaderboard()">🏆 Leaderboard</button>
+        <button class="btn btn-secondary btn-sm" onclick="openRooms()">🎮 Room History</button>
+        <button class="btn btn-secondary btn-sm" style="color:var(--accent2)" onclick="logout()">Logout</button>
+      </div>
+    </div>
   </div>
 
-  <div class="log" id="log"></div>
+  <!-- ████ GAME SCREEN ████ -->
+  <div class="screen wide" id="game-screen" style="display:none">
+    <div class="nav-strip">
+      <button class="btn btn-secondary btn-sm" onclick="openLeaderboard()">🏆 Leaderboard</button>
+      <button class="btn btn-secondary btn-sm" onclick="openRooms()">🎮 Rooms</button>
+    </div>
+
+    <div class="game-header">
+      <div class="room-badge" id="game-room-id"></div>
+      <div class="round-pill">Round <span id="cur-round">1</span> / <span id="tot-rounds">3</span></div>
+    </div>
+
+    <div class="players-row">
+      <!-- MY CARD -->
+      <div class="player-card me" id="my-card">
+        <div class="player-label">You</div>
+        <div class="player-name" id="my-name">—</div>
+        <div class="player-score" id="my-score">0</div>
+        <div class="player-spin" id="my-spin">—</div>
+      </div>
+      <div class="vs-badge">VS</div>
+      <!-- OPP CARD -->
+      <div class="player-card opp" id="opp-card">
+        <div class="player-label">Opponent</div>
+        <div class="player-name" id="opp-name">—</div>
+        <div class="player-score" id="opp-score">0</div>
+        <div class="player-spin" id="opp-spin">—</div>
+      </div>
+    </div>
+
+    <!-- WHEEL -->
+    <div class="wheel-section">
+      <span class="wheel-pointer">▼</span>
+      <canvas id="wheel-canvas" width="300" height="300"></canvas>
+    </div>
+
+    <button class="btn btn-primary" id="spin-btn" onclick="doSpin()">SPIN!</button>
+    <div style="text-align:center;margin-top:10px">
+      <small id="spin-hint" style="color:var(--muted)">Click SPIN to spin the wheel!</small>
+    </div>
+  </div>
+
+  <!-- ████ GAME OVER SCREEN ████ -->
+  <div class="screen" id="gameover-screen" style="display:none">
+    <div class="card" style="text-align:center">
+      <div class="result-trophy" id="go-trophy">🏆</div>
+      <div class="result-title" id="go-title">WINNER!</div>
+      <div class="result-subtitle" id="go-sub"></div>
+      <div class="score-breakdown">
+        <div class="score-box">
+          <div class="sb-name" id="go-p1-name"></div>
+          <div class="sb-val"  id="go-p1-score"></div>
+        </div>
+        <div class="score-box">
+          <div class="sb-name" id="go-p2-name"></div>
+          <div class="sb-val"  id="go-p2-score"></div>
+        </div>
+      </div>
+      <div class="room-badge" id="go-room" style="margin-bottom:20px"></div>
+      <div class="gameover-btns">
+        <button class="btn btn-primary"    onclick="doRematch()">🔁 Rematch</button>
+        <button class="btn btn-secondary"  onclick="goBackToLobby()">🔍 Find New Opponent</button>
+        <button class="btn btn-secondary"  onclick="openLeaderboard()">🏆 Leaderboard</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
-<!-- RESULT OVERLAY -->
-<div class="overlay" id="resultOverlay">
-  <div class="overlay-card">
-    <h2 id="overlayTitle" style="color:var(--accent)">ROUND OVER</h2>
-    <div id="overlayBody"></div>
-    <div class="btn-row" style="margin-top:1.5rem">
-      <button class="btn btn-primary" onclick="closeOverlay()">NEXT ROUND</button>
+<!-- ████ ROUND TOAST ████ -->
+<div id="round-toast">
+  <div class="toast-title" id="toast-title"></div>
+  <div class="toast-detail" id="toast-detail"></div>
+</div>
+
+<!-- ████ LEADERBOARD MODAL ████ -->
+<div id="lb-modal">
+  <div class="lb-card">
+    <div class="lb-header">
+      <h2>🏆 Leaderboard</h2>
+      <button class="lb-close" onclick="closeLB()">✕</button>
     </div>
+    <table class="lb-table">
+      <thead><tr>
+        <th>#</th><th>Player</th><th>Points</th><th>Wins</th><th>Games</th><th>Best Spin</th>
+      </tr></thead>
+      <tbody id="lb-body"></tbody>
+    </table>
   </div>
 </div>
 
-<!-- GAME OVER OVERLAY -->
-<div class="overlay" id="gameOverOverlay">
-  <div class="overlay-card">
-    <h2 id="gameOverTitle" style="color:var(--accent2)">🏆 GAME OVER</h2>
-    <div class="winner-name" id="winnerName"></div>
-    <div class="final-scores" id="finalScores"></div>
-    <div class="btn-row">
-      <button class="btn btn-primary" onclick="doRematch()">REMATCH</button>
-      <button class="btn btn-secondary" onclick="location.reload()">LEAVE</button>
+<!-- ████ ROOMS MODAL ████ -->
+<div id="rooms-modal">
+  <div class="lb-card">
+    <div class="lb-header">
+      <h2>🎮 Room History</h2>
+      <button class="lb-close" onclick="closeRooms()">✕</button>
     </div>
+    <div id="rooms-body"></div>
   </div>
 </div>
 
 <script>
-// ─── SOCKET ───────────────────────────────────────────────
-const socket = io({ transports: ["polling", "websocket"] });
+/* ======================================
+   STATE
+====================================== */
+let socket       = null;
+let myUsername   = null;
+let myRoomId     = null;
+let myTotalRounds= 3;
+let myRound      = 1;
+let myScore      = 0;
+let oppScore     = 0;
+let hasSpin      = false;
+let spinning     = false;
+const SEGMENTS   = [100,200,300,400,500,50,150,250,350,450];
+const SEG_COLORS = [
+  '#f7c948','#ff5e5b','#4ea8de','#35d07f','#b07af7',
+  '#f7a948','#ff9b5e','#5ec4de','#8dd35e','#de5e9b'
+];
 
-// ─── STATE ────────────────────────────────────────────────
-let myName = "", oppName = "", myTotal = 0, oppTotal = 0;
-let currentRound = 1, totalRounds = 3;
-let hasSpun = false;
-let myWheelAngle = 0, oppWheelAngle = 0;
-const SEGMENTS = [100, 200, 300, 400, 500, 50, 150, 250, 350, 450];
-const COLORS = ["#f0c040","#ff4d6d","#4dffa0","#4db8ff","#ff9f40","#c77dff","#ff6b35","#00b4d8","#e63946","#2dc653"];
+/* ======================================
+   AUTH TABS
+====================================== */
+function switchTab(t) {
+  document.getElementById('form-login').style.display    = t==='login'    ? '' : 'none';
+  document.getElementById('form-register').style.display = t==='register' ? '' : 'none';
+  document.getElementById('tab-login').classList.toggle('active',    t==='login');
+  document.getElementById('tab-register').classList.toggle('active', t==='register');
+}
+function showAlert(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 4000);
+}
 
-// ─── DRAW WHEEL ───────────────────────────────────────────
-function drawWheel(canvasId, rotation = 0) {
-  const canvas = document.getElementById(canvasId);
-  const ctx = canvas.getContext("2d");
-  const cx = canvas.width / 2, cy = canvas.height / 2;
-  const r = cx - 8;
-  const sliceAngle = (2 * Math.PI) / SEGMENTS.length;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+async function doRegister() {
+  const u = document.getElementById('reg-user').value.trim();
+  const p = document.getElementById('reg-pass').value.trim();
+  if (!u || !p) { showAlert('reg-err','Fill all fields'); return; }
+  const r = await fetch('/api/register', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({username:u, password:p})
+  });
+  const d = await r.json();
+  if (!r.ok) { showAlert('reg-err', d.error); return; }
+  showAlert('reg-ok', 'Account created! Logging in…');
+  setTimeout(() => { switchTab('login');
+    document.getElementById('login-user').value = u; }, 900);
+}
 
-  SEGMENTS.forEach((val, i) => {
-    const start = rotation + i * sliceAngle;
-    const end = start + sliceAngle;
-    // Slice
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, r, start, end);
-    ctx.closePath();
-    ctx.fillStyle = COLORS[i % COLORS.length];
-    ctx.fill();
-    ctx.strokeStyle = "#0a0a0f";
-    ctx.lineWidth = 2;
-    ctx.stroke();
+async function doLogin() {
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value.trim();
+  if (!u || !p) { showAlert('login-err','Fill all fields'); return; }
+  const r = await fetch('/api/login', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({username:u, password:p})
+  });
+  const d = await r.json();
+  if (!r.ok) { showAlert('login-err', d.error); return; }
+  myUsername = d.username;
+  showScreen('waiting-screen');
+  initSocket();
+}
 
-    // Label
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(start + sliceAngle / 2);
-    ctx.textAlign = "right";
-    ctx.fillStyle = "#0a0a0f";
-    ctx.font = "bold 18px Orbitron, monospace";
-    ctx.fillText(val, r - 12, 6);
-    ctx.restore();
+function logout() {
+  if (socket) socket.disconnect();
+  socket = null; myUsername = null; myRoomId = null;
+  showScreen('auth-screen');
+}
+
+/* ======================================
+   SOCKET
+====================================== */
+function initSocket() {
+  if (socket) socket.disconnect();
+  socket = io();
+
+  socket.on('connect', () => {
+    document.getElementById('wait-msg').textContent = 'Looking for an opponent…';
+    socket.emit('join', { username: myUsername });
   });
 
-  // Center circle
+  socket.on('state', (d) => {
+    if (d.status === 'waiting') {
+      document.getElementById('wait-msg').textContent = d.message;
+      renderWaitStats(d.stats);
+    }
+    if (d.status === 'matched' || d.status === 'rematch') {
+      myRoomId      = d.room;
+      myTotalRounds = d.total_rounds;
+      myRound       = d.round;
+      myScore       = 0; oppScore = 0; hasSpin = false; spinning = false;
+      document.getElementById('my-name').textContent  = d.your_name;
+      document.getElementById('opp-name').textContent = d.opponent;
+      document.getElementById('my-score').textContent  = '0';
+      document.getElementById('opp-score').textContent = '0';
+      document.getElementById('my-spin').textContent   = '—';
+      document.getElementById('opp-spin').textContent  = '—';
+      document.getElementById('game-room-id').textContent = '🎮 ' + d.room;
+      document.getElementById('cur-round').textContent   = d.round;
+      document.getElementById('tot-rounds').textContent  = d.total_rounds;
+      resetSpinBtn();
+      drawWheel(0);
+      showScreen('game-screen');
+    }
+    if (d.status === 'opponent_left') {
+      showToast('⚠️ Opponent Left', d.message, 5000);
+      setTimeout(() => goBackToLobby(), 5000);
+    }
+  });
+
+  socket.on('spin_result', (d) => {
+    const isMe = (d.username === myUsername);
+    if (isMe) {
+      document.getElementById('my-spin').textContent = `Last spin: ${d.value}`;
+      triggerWheelSpin(d.degrees);
+    } else {
+      document.getElementById('opp-spin').textContent = `Last spin: ${d.value}`;
+    }
+  });
+
+  socket.on('round_result', (d) => {
+    // update totals
+    const p1 = d.p1, p2 = d.p2;
+    const me   = (p1.username === myUsername) ? p1 : p2;
+    const opp  = (p1.username === myUsername) ? p2 : p1;
+    myScore  = me.total;  oppScore = opp.total;
+    document.getElementById('my-score').textContent  = myScore;
+    document.getElementById('opp-score').textContent = oppScore;
+    myRound  = d.next_round;
+    document.getElementById('cur-round').textContent = d.next_round;
+
+    const rw = d.round_winner === myUsername ? '✅ You won this round!'
+             : d.round_winner === 'Tie'      ? '🤝 Round Tied!'
+             :                                 `❌ ${d.round_winner} won this round`;
+    showToast(rw, `Round ${d.next_round-1} done — Starting Round ${d.next_round}…`);
+
+    hasSpin = false; spinning = false;
+    resetSpinBtn();
+    drawWheel(0);
+    document.getElementById('my-spin').textContent  = '—';
+    document.getElementById('opp-spin').textContent = '—';
+  });
+
+  socket.on('game_over', (d) => {
+    const p1 = d.p1, p2 = d.p2;
+    const me  = (p1.username === myUsername) ? p1 : p2;
+    const opp = (p1.username === myUsername) ? p2 : p1;
+    document.getElementById('go-p1-name').textContent  = me.username;
+    document.getElementById('go-p1-score').textContent = me.total;
+    document.getElementById('go-p2-name').textContent  = opp.username;
+    document.getElementById('go-p2-score').textContent = opp.total;
+    document.getElementById('go-room').textContent     = '🎮 ' + d.room_id;
+
+    if (d.winner === myUsername) {
+      document.getElementById('go-trophy').textContent = '🏆';
+      document.getElementById('go-title').textContent  = 'YOU WIN!';
+      document.getElementById('go-title').style.color  = 'var(--green)';
+      document.getElementById('go-sub').textContent    = 'Incredible! You dominated the wheel.';
+    } else if (d.winner === 'Tie') {
+      document.getElementById('go-trophy').textContent = '🤝';
+      document.getElementById('go-title').textContent  = 'IT\'S A TIE!';
+      document.getElementById('go-title').style.color  = 'var(--accent)';
+      document.getElementById('go-sub').textContent    = 'Equally matched!';
+    } else {
+      document.getElementById('go-trophy').textContent = '💀';
+      document.getElementById('go-title').textContent  = 'YOU LOST!';
+      document.getElementById('go-title').style.color  = 'var(--accent2)';
+      document.getElementById('go-sub').textContent    = `${d.winner} takes the victory.`;
+    }
+    showScreen('gameover-screen');
+  });
+
+  socket.on('error', (d) => showToast('⚠️ Error', d.message, 3000));
+  socket.on('leaderboard', (d) => renderLeaderboard(d.data));
+
+  socket.on('disconnect', () => {
+    document.getElementById('wait-msg').textContent = 'Disconnected. Reconnecting…';
+  });
+}
+
+/* ======================================
+   SPIN
+====================================== */
+function doSpin() {
+  if (hasSpin || spinning) return;
+  socket.emit('spin');
+  hasSpin  = true; spinning = true;
+  const btn = document.getElementById('spin-btn');
+  btn.classList.add('btn-disabled');
+  btn.textContent = 'Spinning…';
+  document.getElementById('spin-hint').textContent = 'Waiting for opponent to spin…';
+}
+
+function resetSpinBtn() {
+  const btn = document.getElementById('spin-btn');
+  btn.classList.remove('btn-disabled');
+  btn.textContent = 'SPIN!';
+  document.getElementById('spin-hint').textContent = 'Click SPIN to spin the wheel!';
+}
+
+/* ======================================
+   WHEEL DRAWING
+====================================== */
+function drawWheel(rotation) {
+  const canvas = document.getElementById('wheel-canvas');
+  const ctx    = canvas.getContext('2d');
+  const cx     = canvas.width / 2;
+  const cy     = canvas.height / 2;
+  const r      = cx - 6;
+  const arc    = (2 * Math.PI) / SEGMENTS.length;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (let i = 0; i < SEGMENTS.length; i++) {
+    const startAngle = rotation + i * arc;
+    const endAngle   = startAngle + arc;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, startAngle, endAngle);
+    ctx.closePath();
+    ctx.fillStyle = SEG_COLORS[i];
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.4)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // label
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(startAngle + arc / 2);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(0,0,0,.75)';
+    ctx.font = 'bold 13px DM Sans, sans-serif';
+    ctx.fillText(SEGMENTS[i], r - 10, 5);
+    ctx.restore();
+  }
+
+  // center circle
   ctx.beginPath();
-  ctx.arc(cx, cy, 22, 0, 2 * Math.PI);
-  ctx.fillStyle = "#0a0a0f";
+  ctx.arc(cx, cy, 22, 0, 2*Math.PI);
+  ctx.fillStyle = '#0b0c10';
   ctx.fill();
-  ctx.strokeStyle = "#f0c040";
-  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'var(--accent)';
+  ctx.lineWidth = 2;
   ctx.stroke();
 }
 
-// ─── ANIMATE SPIN ─────────────────────────────────────────
-function animateSpin(canvasId, fromAngle, totalDeg, duration, onDone) {
-  const canvas = document.getElementById(canvasId);
-  const totalRad = (totalDeg * Math.PI) / 180;
-  const start = performance.now();
+let wheelAngle = 0;
+let wheelAnim  = null;
 
-  canvas.classList.add("spinning");
+function triggerWheelSpin(degrees) {
+  const duration = 4000;
+  const start    = performance.now();
+  const startAng = wheelAngle;
+  const endAng   = startAng + (degrees * Math.PI / 180);
 
   function frame(now) {
     const elapsed = now - start;
-    const progress = Math.min(elapsed / duration, 1);
-    // Ease out cubic
-    const ease = 1 - Math.pow(1 - progress, 3);
-    const angle = fromAngle + totalRad * ease;
-    drawWheel(canvasId, angle);
-    if (progress < 1) {
-      requestAnimationFrame(frame);
+    const t       = Math.min(elapsed / duration, 1);
+    const ease    = 1 - Math.pow(1 - t, 4); // ease-out quartic
+    const cur     = startAng + (endAng - startAng) * ease;
+    drawWheel(cur);
+    if (t < 1) {
+      wheelAnim = requestAnimationFrame(frame);
     } else {
-      canvas.classList.remove("spinning");
-      if (onDone) onDone(angle % (2 * Math.PI));
+      wheelAngle = endAng % (2 * Math.PI);
+      spinning = false;
     }
   }
+  if (wheelAnim) cancelAnimationFrame(wheelAnim);
   requestAnimationFrame(frame);
 }
 
-// ─── SCREENS ──────────────────────────────────────────────
+/* ======================================
+   TOAST
+====================================== */
+let toastTimer = null;
+function showToast(title, detail, ms = 3500) {
+  const t = document.getElementById('round-toast');
+  document.getElementById('toast-title').textContent  = title;
+  document.getElementById('toast-detail').textContent = detail;
+  t.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+}
+
+/* ======================================
+   HELPERS
+====================================== */
 function showScreen(id) {
-  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
-}
-
-// ─── JOIN ─────────────────────────────────────────────────
-function joinGame() {
-  const input = document.getElementById("usernameInput").value.trim();
-  if (!input) { document.getElementById("usernameInput").focus(); return; }
-  myName = input;
-  showScreen("waiting");
-  socket.emit("join", { username: myName });
-}
-
-document.getElementById("usernameInput").addEventListener("keydown", e => {
-  if (e.key === "Enter") joinGame();
-});
-
-// ─── SPIN ─────────────────────────────────────────────────
-function doSpin() {
-  if (hasSpun) return;
-  hasSpun = true;
-  document.getElementById("spinBtn").disabled = true;
-  setStatus("Spinning...");
-  socket.emit("spin");
-}
-
-// ─── REMATCH ──────────────────────────────────────────────
-function doRematch() {
-  document.getElementById("gameOverOverlay").classList.remove("show");
-  myTotal = 0; oppTotal = 0;
-  document.getElementById("myScore").textContent = "0";
-  document.getElementById("oppScore").textContent = "0";
-  document.getElementById("mySpinVal").textContent = "";
-  document.getElementById("oppSpinVal").textContent = "";
-  socket.emit("rematch");
-}
-
-// ─── OVERLAY ──────────────────────────────────────────────
-function closeOverlay() {
-  document.getElementById("resultOverlay").classList.remove("show");
-  hasSpun = false;
-  document.getElementById("spinBtn").disabled = false;
-  setStatus("Your turn — spin the wheel!");
-}
-
-// ─── STATUS + LOG ─────────────────────────────────────────
-function setStatus(msg) {
-  document.getElementById("statusMsg").textContent = msg;
-}
-
-function addLog(msg, type = "") {
-  const log = document.getElementById("log");
-  const el = document.createElement("div");
-  el.className = "log-entry " + type;
-  el.textContent = msg;
-  log.appendChild(el);
-  log.scrollTop = log.scrollHeight;
-}
-
-// ─── CONFETTI ─────────────────────────────────────────────
-function spawnConfetti() {
-  const colors = ["#f0c040","#ff4d6d","#4dffa0","#4db8ff","#ff9f40","#c77dff"];
-  for (let i = 0; i < 80; i++) {
-    const el = document.createElement("div");
-    el.className = "confetti-piece";
-    el.style.cssText = `
-      left:${Math.random()*100}vw;
-      background:${colors[Math.floor(Math.random()*colors.length)]};
-      width:${6+Math.random()*8}px;
-      height:${6+Math.random()*8}px;
-      animation-duration:${1.5+Math.random()*2}s;
-      animation-delay:${Math.random()*0.5}s;
-      border-radius:${Math.random()>0.5?'50%':'2px'};
-    `;
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 3000);
+  ['auth-screen','waiting-screen','game-screen','gameover-screen']
+    .forEach(s => document.getElementById(s).style.display = s===id ? '' : 'none');
+  if (id==='waiting-screen') {
+    document.getElementById('wait-room').style.display = 'none';
   }
 }
 
-// ─── SOCKET EVENTS ────────────────────────────────────────
-socket.on("state", (data) => {
-  if (data.status === "waiting") {
-    showScreen("waiting");
-  }
-  else if (data.status === "matched" || data.status === "rematch") {
-    if (data.status === "matched") {
-      myName = data.your_name || myName;
-      oppName = data.opponent || "Opponent";
-      document.getElementById("myName").textContent = myName;
-      document.getElementById("oppName").textContent = oppName;
-      const shortRoom = (data.room || "").slice(-8);
-      document.getElementById("roomDisplay").textContent = shortRoom;
-    }
-    currentRound = data.round || 1;
-    totalRounds = data.total_rounds || 3;
-    document.getElementById("roundDisplay").textContent = `ROUND ${currentRound} / ${totalRounds}`;
-    hasSpun = false;
-    document.getElementById("spinBtn").disabled = false;
-    document.getElementById("mySpinVal").textContent = "";
-    document.getElementById("oppSpinVal").textContent = "";
-    drawWheel("myWheel", 0);
-    drawWheel("oppWheel", 0);
-    showScreen("game");
-    setStatus("Match found! Spin the wheel!");
-    addLog(`⚔️ ${myName} vs ${oppName} — FIGHT!`, "highlight");
-  }
-  else if (data.status === "opponent_left") {
-    addLog("⚠️ " + data.message, "warn");
-    setStatus(data.message);
-    document.getElementById("spinBtn").disabled = true;
-  }
-});
-
-socket.on("spin_result", (data) => {
-  const isMe = data.username === myName;
-  const canvasId = isMe ? "myWheel" : "oppWheel";
-  const valId = isMe ? "mySpinVal" : "oppSpinVal";
-  const fromAngle = isMe ? myWheelAngle : oppWheelAngle;
-
-  addLog(`🎡 ${data.username} spun the wheel...`);
-
-  animateSpin(canvasId, fromAngle, data.degrees, 4000, (finalAngle) => {
-    if (isMe) myWheelAngle = finalAngle;
-    else oppWheelAngle = finalAngle;
-
-    document.getElementById(valId).textContent = `+${data.value}`;
-    addLog(`✅ ${data.username} landed on ${data.value}!`, "highlight");
-  });
-});
-
-socket.on("round_result", (data) => {
-  currentRound = data.next_round;
-  totalRounds = data.total_rounds;
-  document.getElementById("roundDisplay").textContent = `ROUND ${currentRound} / ${totalRounds}`;
-
-  myTotal = data.p1.username === myName ? data.p1.total : data.p2.total;
-  oppTotal = data.p1.username === myName ? data.p2.total : data.p1.total;
-  document.getElementById("myScore").textContent = myTotal;
-  document.getElementById("oppScore").textContent = oppTotal;
-
-  const rw = data.round_winner;
-  const title = document.getElementById("overlayTitle");
-  const body = document.getElementById("overlayBody");
-
-  title.textContent = rw === "Tie" ? "TIE ROUND!" : `${rw} WINS ROUND!`;
-  title.style.color = rw === myName ? "var(--accent3)" : rw === "Tie" ? "var(--accent)" : "var(--accent2)";
-  body.innerHTML = `
-    <div style="color:var(--muted);font-size:0.9rem;margin-bottom:1rem;">Round ${currentRound-1} Results</div>
-    <div class="final-scores">
-      <div class="final-score-item">
-        <div class="name">${data.p1.username}</div>
-        <div class="pts">${data.p1.total}</div>
-      </div>
-      <div class="final-score-item">
-        <div class="name">${data.p2.username}</div>
-        <div class="pts">${data.p2.total}</div>
-      </div>
-    </div>
-    <div style="color:var(--muted);font-size:0.8rem;letter-spacing:2px;">NEXT ROUND STARTING...</div>
+function renderWaitStats(stats) {
+  if (!stats) return;
+  const row = document.getElementById('my-stats-row');
+  row.innerHTML = `
+    <div class="stat-chip">Games: <strong>${stats.games_played||0}</strong></div>
+    <div class="stat-chip">Wins: <strong>${stats.games_won||0}</strong></div>
+    <div class="stat-chip">Points: <strong>${stats.total_points||0}</strong></div>
+    <div class="stat-chip">Best Spin: <strong>${stats.highest_spin||0}</strong></div>
   `;
-  document.getElementById("resultOverlay").classList.add("show");
-  document.getElementById("mySpinVal").textContent = "";
-  document.getElementById("oppSpinVal").textContent = "";
-  myWheelAngle = 0; oppWheelAngle = 0;
-  drawWheel("myWheel", 0);
-  drawWheel("oppWheel", 0);
-});
+}
 
-socket.on("game_over", (data) => {
-  myTotal = data.p1.username === myName ? data.p1.total : data.p2.total;
-  oppTotal = data.p1.username === myName ? data.p2.total : data.p1.total;
-  document.getElementById("myScore").textContent = myTotal;
-  document.getElementById("oppScore").textContent = oppTotal;
+function doRematch() { socket.emit('rematch'); }
 
-  const winner = data.winner;
-  document.getElementById("winnerName").textContent = winner === "Tie" ? "IT'S A TIE!" : `🏆 ${winner}`;
-  document.getElementById("gameOverTitle").textContent = winner === myName ? "YOU WIN!" : winner === "Tie" ? "DRAW!" : "YOU LOSE!";
-  document.getElementById("gameOverTitle").style.color = winner === myName ? "var(--accent3)" : winner === "Tie" ? "var(--accent)" : "var(--accent2)";
-  document.getElementById("finalScores").innerHTML = `
-    <div class="final-score-item">
-      <div class="name">${data.p1.username}</div>
-      <div class="pts">${data.p1.total}</div>
-    </div>
-    <div class="final-score-item">
-      <div class="name">${data.p2.username}</div>
-      <div class="pts">${data.p2.total}</div>
-    </div>
-  `;
-  document.getElementById("gameOverOverlay").classList.add("show");
-  if (winner === myName) spawnConfetti();
-  addLog(winner === "Tie" ? "🤝 It's a tie!" : `🏆 ${winner} wins the game!`, "highlight");
-});
+function goBackToLobby() {
+  showScreen('waiting-screen');
+  document.getElementById('wait-msg').textContent = 'Looking for an opponent…';
+  socket.emit('join', { username: myUsername });
+}
 
-socket.on("error", (data) => {
-  addLog("⚠️ " + data.message, "warn");
-});
+/* ======================================
+   LEADERBOARD
+====================================== */
+function openLeaderboard() {
+  socket.emit('get_leaderboard');
+  document.getElementById('lb-modal').classList.add('show');
+}
+function closeLB()    { document.getElementById('lb-modal').classList.remove('show'); }
+function closeRooms() { document.getElementById('rooms-modal').classList.remove('show'); }
 
-// ─── INIT WHEELS ──────────────────────────────────────────
-window.addEventListener("load", () => {
-  drawWheel("myWheel", 0);
-  drawWheel("oppWheel", 0);
-});
+function renderLeaderboard(data) {
+  const tbody = document.getElementById('lb-body');
+  tbody.innerHTML = data.map((p, i) => `
+    <tr>
+      <td><span class="rank-badge">${i+1}</span></td>
+      <td>${p.username}</td>
+      <td><strong style="color:var(--accent)">${p.total_points}</strong></td>
+      <td>${p.games_won}</td>
+      <td>${p.games_played}</td>
+      <td>${p.highest_spin}</td>
+    </tr>
+  `).join('');
+}
+
+/* ======================================
+   ROOM HISTORY
+====================================== */
+async function openRooms() {
+  const r = await fetch('/api/rooms');
+  const data = await r.json();
+  const body = document.getElementById('rooms-body');
+  if (!data.length) {
+    body.innerHTML = '<p style="color:var(--muted);text-align:center">No rooms yet.</p>';
+  } else {
+    body.innerHTML = data.map(room => {
+      const ps = room.players || [];
+      const sc = room.scores  || {};
+      const stateClass = room.state==='done' ? 'state-done'
+                       : room.state==='active' ? 'state-active' : 'state-abandoned';
+      const scStr = ps.map(p => `${p}: ${sc[p]||0}`).join(' vs ');
+      return `<div class="room-row">
+        <div class="rr-id">🎮 ${room.room_id}</div>
+        <div class="rr-info">
+          ${scStr} &nbsp;·&nbsp;
+          ${room.winner ? `Winner: <strong>${room.winner}</strong> &nbsp;·&nbsp;` : ''}
+          <span class="state-pill ${stateClass}">${room.state}</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('rooms-modal').classList.add('show');
+}
+
+/* ======================================
+   INIT
+====================================== */
+drawWheel(0);
+showScreen('auth-screen');
 </script>
 </body>
 </html>
