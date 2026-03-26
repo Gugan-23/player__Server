@@ -5,29 +5,30 @@ app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 MAX_PLAYERS = 4
-players = {}   # sid → player_name
-player_count = 0
+players = {}   # sid → {name, ip}
 
 # 🔹 When client connects
 @socketio.on('connect')
 def handle_connect():
-    global player_count
-
     if len(players) >= MAX_PLAYERS:
         return False  # ❌ Reject connection
 
-    print("[+] New connection:", request.sid)
+    ip = request.remote_addr
+    print(f"[+] New connection from IP: {ip} | SID: {request.sid}")
 
 
 # 🔹 When player joins
 @socketio.on('join')
 def handle_join(data):
-    global player_count
-
+    ip = request.remote_addr
     username = f"Player{len(players) + 1}"
-    players[request.sid] = username
 
-    print(f"[+] {username} joined")
+    players[request.sid] = {
+        "name": username,
+        "ip": ip
+    }
+
+    print(f"[+] {username} joined from IP: {ip}")
 
     emit('message',
          f"[SERVER] Welcome {username}! ({len(players)}/4 players)",
@@ -42,8 +43,11 @@ def handle_join(data):
 # 🔹 Receive message
 @socketio.on('message')
 def handle_message(msg):
-    username = players.get(request.sid, "Unknown")
-    print(f"[{username}]: {msg}")
+    player = players.get(request.sid, {"name": "Unknown", "ip": "?"})
+    username = player["name"]
+    ip = player["ip"]
+
+    print(f"[{username} | {ip}]: {msg}")
 
     emit('message',
          f"[{username}]: {msg}",
@@ -55,12 +59,14 @@ def handle_message(msg):
 @socketio.on('disconnect')
 def handle_disconnect():
     if request.sid in players:
-        username = players[request.sid]
-        del players[request.sid]
+        player = players[request.sid]
+        username = player["name"]
+        ip = player["ip"]
 
+        del players[request.sid]
         remaining = len(players)
 
-        print(f"[-] {username} left ({remaining}/4)")
+        print(f"[-] {username} ({ip}) left ({remaining}/4)")
 
         emit('message',
              f"[SERVER] ❌ {username} has left! ({remaining}/4 players)",
