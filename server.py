@@ -20,7 +20,7 @@ def handle_connect():
 # 🔹 When player joins
 @socketio.on('join')
 def handle_join(data):
-    ip = request.remote_addr
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
     username = f"Player{len(players) + 1}"
 
     players[request.sid] = {
