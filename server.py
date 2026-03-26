@@ -3,7 +3,6 @@ from flask_socketio import SocketIO, emit
 
 app = Flask(__name__)
 
-# ✅ USE THREADING (NOT eventlet)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 MAX_PLAYERS = 4
