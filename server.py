@@ -24,12 +24,14 @@ socketio = SocketIO(
 # ==============================
 # ENV CONFIG
 # ==============================
-MONGO_URI  = os.getenv("MONGO_URI",  "mongodb://localhost:27017/")
-DB_NAME    = os.getenv("DB_NAME",    "spinbattle")
-SECRET_KEY = os.getenv("SECRET_KEY", "changeme_super_secret")
-PORT       = int(os.getenv("PORT",   5000))
-DEBUG      = os.getenv("DEBUG",      "false").lower() == "true"
 
+MONGO_URI = os.getenv("MONGO_URI") or "mongodb://127.0.0.1:27017/"
+DB_NAME   = os.getenv("DB_NAME") or "spinbattle"
+SECRET_KEY= os.getenv("SECRET_KEY") or "super_secret_key_123"
+
+PORT      = int(os.getenv("PORT") or 5000)
+
+DEBUG     = os.getenv("DEBUG", "false").lower() in ["true", "1", "yes"]
 app.secret_key = SECRET_KEY
 
 print(f"[ENV] DB={DB_NAME}  PORT={PORT}  DEBUG={DEBUG}")
