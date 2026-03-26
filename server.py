@@ -1,69 +1,77 @@
-import socket
-import threading
+from flask import Flask, request
+from flask_socketio import SocketIO, emit
 
-HOST = '0.0.0.0'
-PORT = 5555
+app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origins="*")
+
 MAX_PLAYERS = 4
+players = {}   # sid → player_name
+player_count = 0
 
-players = {}
-lock = threading.Lock()
+# 🔹 When client connects
+@socketio.on('connect')
+def handle_connect():
+    global player_count
 
-def broadcast(message, sender_conn=None):
-    with lock:
-        for conn in list(players):
-            if conn != sender_conn:
-                try:
-                    conn.sendall(message.encode())
-                except:
-                    pass
+    if len(players) >= MAX_PLAYERS:
+        return False  # ❌ Reject connection
 
-def handle_player(conn, addr, player_id):
-    name = f"Player{player_id}"
-    with lock:
-        players[conn] = name
-    print(f"[+] {name} connected from {addr}")
-    broadcast(f"[SERVER] {name} has joined! ({len(players)}/4 players)\n")
-    conn.sendall(f"[SERVER] Welcome {name}! You are Player {player_id}\n".encode())
+    print("[+] New connection:", request.sid)
 
-    try:
-        while True:
-            data = conn.recv(1024)
-            if not data:
-                break
-            msg = data.decode().strip()
-            print(f"[{name}]: {msg}")
-            broadcast(f"[{name}]: {msg}\n", sender_conn=conn)
-    except:
-        pass
-    finally:
-        # ✅ Remove player FIRST, then broadcast updated count
-        with lock:
-            if conn in players:
-                del players[conn]
-        conn.close()
+
+# 🔹 When player joins
+@socketio.on('join')
+def handle_join(data):
+    global player_count
+
+    username = f"Player{len(players) + 1}"
+    players[request.sid] = username
+
+    print(f"[+] {username} joined")
+
+    emit('message',
+         f"[SERVER] Welcome {username}! ({len(players)}/4 players)",
+         to=request.sid)
+
+    emit('message',
+         f"[SERVER] {username} has joined! ({len(players)}/4 players)",
+         broadcast=True,
+         include_self=False)
+
+
+# 🔹 Receive message
+@socketio.on('message')
+def handle_message(msg):
+    username = players.get(request.sid, "Unknown")
+    print(f"[{username}]: {msg}")
+
+    emit('message',
+         f"[{username}]: {msg}",
+         broadcast=True,
+         include_self=False)
+
+
+# 🔹 When player disconnects
+@socketio.on('disconnect')
+def handle_disconnect():
+    if request.sid in players:
+        username = players[request.sid]
+        del players[request.sid]
 
         remaining = len(players)
-        print(f"[-] {name} has LEFT the server  ({remaining}/4 players remaining)")  # ✅ Server log
-        broadcast(f"[SERVER] ❌ {name} has left! ({remaining}/4 players remaining)\n")  # ✅ All clients notified
 
-def start_server():
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind((HOST, PORT))
-    server.listen(MAX_PLAYERS)
-    print(f"[SERVER] Listening on port {PORT}, waiting for {MAX_PLAYERS} players...")
+        print(f"[-] {username} left ({remaining}/4)")
 
-    player_id = 1
-    while True:
-        conn, addr = server.accept()
-        if len(players) >= MAX_PLAYERS:
-            conn.sendall(b"[SERVER] Sorry, server is full (4/4 players).\n")
-            conn.close()
-            continue
-        thread = threading.Thread(target=handle_player, args=(conn, addr, player_id))
-        thread.daemon = True
-        thread.start()
-        player_id += 1
+        emit('message',
+             f"[SERVER] ❌ {username} has left! ({remaining}/4 players)",
+             broadcast=True)
+
+
+# 🔹 Basic route (required for Render)
+@app.route("/")
+def home():
+    return "Multiplayer Game Server Running 🚀"
+
 
 if __name__ == "__main__":
-    start_server()
+    socketio.run(app, host="0.0.0.0", port=5000)
