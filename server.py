@@ -1,34 +1,30 @@
-import eventlet
-eventlet.monkey_patch()
 from flask import Flask, request
 from flask_socketio import SocketIO, emit
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
+
+# ✅ USE THREADING (NOT eventlet)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 MAX_PLAYERS = 4
-players = {}   # sid → {name, ip}
+players = {}
 
-# 🔹 When client connects
+# 🔹 Connect
 @socketio.on('connect')
 def handle_connect():
     if len(players) >= MAX_PLAYERS:
-        return False  # ❌ Reject connection
+        return False
 
     ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    print(f"[+] New connection from IP: {ip} | SID: {request.sid}")
+    print(f"[+] New connection from IP: {ip}")
 
-
-# 🔹 When player joins
+# 🔹 Join
 @socketio.on('join')
 def handle_join(data):
     ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    username = f"Player{len(players) + 1}"
+    username = f"Player{len(players)+1}"
 
-    players[request.sid] = {
-        "name": username,
-        "ip": ip
-    }
+    players[request.sid] = {"name": username, "ip": ip}
 
     print(f"[+] {username} joined from IP: {ip}")
 
@@ -37,52 +33,40 @@ def handle_join(data):
          to=request.sid)
 
     emit('message',
-         f"[SERVER] {username} has joined! ({len(players)}/4 players)",
+         f"[SERVER] {username} joined!",
          broadcast=True,
          include_self=False)
 
-
-# 🔹 Receive message
+# 🔹 Message
 @socketio.on('message')
 def handle_message(msg):
     if request.sid not in players:
-        return  # ❌ Ignore until joined
+        return
 
     player = players[request.sid]
-    username = player["name"]
-    ip = player["ip"]
-
-    print(f"[{username} | {ip}]: {msg}")
+    print(f"[{player['name']}]: {msg}")
 
     emit('message',
-         f"[{username}]: {msg}",
+         f"[{player['name']}]: {msg}",
          broadcast=True,
          include_self=False)
 
-
-# 🔹 When player disconnects
+# 🔹 Disconnect
 @socketio.on('disconnect')
 def handle_disconnect():
     if request.sid in players:
         player = players[request.sid]
-        username = player["name"]
-        ip = player["ip"]
-
         del players[request.sid]
-        remaining = len(players)
 
-        print(f"[-] {username} ({ip}) left ({remaining}/4)")
+        print(f"[-] {player['name']} left")
 
         emit('message',
-             f"[SERVER] ❌ {username} has left! ({remaining}/4 players)",
+             f"[SERVER] {player['name']} left",
              broadcast=True)
 
-
-# 🔹 Basic route (required for Render)
 @app.route("/")
 def home():
-    return "Multiplayer Game Server Running 🚀"
-
+    return "Server Running 🚀"
 
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=5000)
