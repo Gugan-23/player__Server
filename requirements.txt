@@ -4,4 +4,4 @@ eventlet
 pymongo
 python-dotenv
 werkzeug
- 
+gunicorn
