@@ -13,7 +13,7 @@ def handle_connect():
     if len(players) >= MAX_PLAYERS:
         return False  # ❌ Reject connection
 
-    ip = request.remote_addr
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
     print(f"[+] New connection from IP: {ip} | SID: {request.sid}")
 
 
