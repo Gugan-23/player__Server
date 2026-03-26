@@ -1,4 +1,5 @@
 
 flask
+eventlet
 flask-socketio
 gunicorn
