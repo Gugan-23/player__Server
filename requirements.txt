@@ -1,5 +1,7 @@
-
 flask
-eventlet
 flask-socketio
+eventlet
 gunicorn
+pymongo
+dnspython
+python-dotenv
